@@ -1,0 +1,23 @@
+cff-version: "1.2.0"
+message: "If you use this software, please cite it using the metadata below."
+title: "TailSeeker: Tilted Score Matching for Molecular Generation"
+version: "0.1.0"
+date-released: "2026-03-27"
+license: MIT
+repository-code: "https://github.com/placeholder/tailseeker"
+authors:
+  - family-names: "Surname"
+    given-names: "Given"
+    affiliation: "Institution"
+    orcid: "https://orcid.org/0000-0000-0000-0000"
+
+preferred-citation:
+  type: conference-paper
+  title: "TailSeeker: Tilted Score Matching for Molecular Generation"
+  authors:
+    - family-names: "Surname"
+      given-names: "Given"
+      affiliation: "Institution"
+  conference:
+    name: "NeurIPS 2026 Workshop on Machine Learning for Drug Discovery"
+  year: 2026

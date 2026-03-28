@@ -1,0 +1,32 @@
+# TailSeeker default configuration
+# Every key here corresponds to a config.get("key", default) call in the codebase.
+
+# Reproducibility
+seed: 42
+
+# Model
+model_type: unet          # one of: ["unet"]
+in_channels: 4
+out_channels: 4
+model_channels: 128
+num_res_blocks: 2
+attention_resolutions: [16]
+dropout: 0.0
+
+# Tilted loss
+tilt: 1.0                 # TERM temperature; 0.0 = standard ERM
+
+# Training
+learning_rate: 1.0e-4
+batch_size: 32
+max_epochs: 100
+use_ema: false
+ema_decay: 0.9999
+
+# Data
+data_root: data/
+num_workers: 4
+
+# Logging
+project_name: tailseeker
+log_every_n_steps: 50
