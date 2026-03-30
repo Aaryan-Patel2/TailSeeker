@@ -1,0 +1,13 @@
+# Ablation sweep: tilt ∈ {-5,-2,-1,0,1,2,5,10} × seeds {0,1,2} = 24 runs.
+# Run with: python scripts/train.py --multirun +experiment=ablation_tilt
+
+# @package _global_
+defaults:
+  - override /loss: {}
+
+hydra:
+  mode: MULTIRUN
+  sweeper:
+    params:
+      loss.tilt: -5,-2,-1,0,1,2,5,10
+      seed: 0,1,2

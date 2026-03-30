@@ -1,32 +1,51 @@
-# TailSeeker default configuration
-# Every key here corresponds to a config.get("key", default) call in the codebase.
+# TailSeeker default configuration.
+# Every key used in src/ must appear here with a sensible default.
+# Override at runtime: python scripts/train.py loss.tilt=2.0 seed=1
 
-# Reproducibility
+# ── Reproducibility ──────────────────────────────────────────────────
 seed: 42
 
-# Model
-model_type: unet          # one of: ["unet"]
-in_channels: 4
-out_channels: 4
-model_channels: 128
-num_res_blocks: 2
-attention_resolutions: [16]
-dropout: 0.0
+# ── Model ────────────────────────────────────────────────────────────
+model:
+  in_channels: 4          # noisy input feature channels
+  out_channels: 4         # predicted noise channels (must match in_channels)
+  model_channels: 64      # base hidden dim (doubled at each downsample)
+  num_res_blocks: 2       # ResBlocks per resolution level
+  dropout: 0.0            # dropout probability inside ResBlocks
 
-# Tilted loss
-tilt: 1.0                 # TERM temperature; 0.0 = standard ERM
+# ── Loss ─────────────────────────────────────────────────────────────
+loss:
+  tilt: 1.0               # TERM temperature; 0.0 = standard ERM (DDPMSimpleLoss)
+                          # ablation axis: [-5,-2,-1,0,1,2,5,10]
 
-# Training
-learning_rate: 1.0e-4
-batch_size: 32
-max_epochs: 100
-use_ema: false
-ema_decay: 0.9999
+# ── Diffusion schedule ───────────────────────────────────────────────
+diffusion:
+  schedule: linear        # "linear" | "cosine"
+  num_timesteps: 1000
+  beta_start: 1.0e-4      # only used by linear schedule
+  beta_end: 0.02          # only used by linear schedule
 
-# Data
-data_root: data/
-num_workers: 4
+# ── Training ─────────────────────────────────────────────────────────
+training:
+  learning_rate: 1.0e-4
+  batch_size: 32
+  max_epochs: 100
+  grad_clip: 1.0
+  use_ema: false
+  ema_decay: 0.9999
+  log_every_n_steps: 50   # W&B log frequency
 
-# Logging
-project_name: tailseeker
-log_every_n_steps: 50
+# ── Data ─────────────────────────────────────────────────────────────
+data:
+  root: data/             # QM9 raw cache; relative to repo root
+  max_atoms: 29           # QM9 max heavy atoms
+  num_workers: 4
+  download: false         # set true to auto-download QM9 on first run
+
+# ── Logging / output ─────────────────────────────────────────────────
+wandb:
+  project: tailseeker
+  entity: null            # set to your W&B username/org or null to skip
+  mode: online            # "online" | "offline" | "disabled"
+
+output_dir: outputs/${now:%Y-%m-%d_%H-%M-%S}  # Hydra interpolation

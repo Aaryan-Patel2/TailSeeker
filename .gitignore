@@ -167,3 +167,6 @@ outputs
 .claude/
 .llm/
 CLAUDE.md
+
+#UV-generated files
+.ruff_cache/
