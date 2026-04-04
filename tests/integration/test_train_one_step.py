@@ -53,40 +53,41 @@ def test_erm_epoch_one_checkpoint_saved(tmp_path: Path):
     assert "Train/loss" in log
 
 
-# ── TSM stub (TiltedScoreMatchingLoss, tilt=1) ───────────────────────
+# ── TiltedScoreMatchingLoss (implemented) ────────────────────────────
 
-def test_tsm_stub_one_step_no_crash(tmp_path: Path):
-    """One training step with TSM stub does not raise — backward is skipped."""
+def test_tsm_one_step_runs_real_backward(tmp_path: Path):
+    """TSM step completes with real backward pass — loss_stub_active is False."""
     trainer = _make_trainer(tilt=1.0, tmp_path=tmp_path)
     log = trainer.train_step(_STUB_BATCH)
-    assert log.get("loss_stub_active") is True, (
-        f"Expected loss_stub_active=True, got: {log}"
-    )
+    assert log.get("loss_stub_active") is False, f"Expected real loss, got: {log}"
+    assert "Train/loss" in log
+    assert isinstance(log["Train/loss"], float)
 
 
-def test_tsm_stub_epoch_no_crash(tmp_path: Path):
-    """Full epoch with TSM stub completes and logs loss_stub_active=True."""
+def test_tsm_epoch_logs_loss_components(tmp_path: Path):
+    """Full TSM epoch logs tilt, mse_mean, mse_max components."""
     trainer = _make_trainer(tilt=1.0, tmp_path=tmp_path)
     log = trainer.train_epoch([_STUB_BATCH])
-    assert log.get("loss_stub_active") == 1.0, (  # aggregated as float mean of True=1
-        f"Expected loss_stub_active=1.0 in epoch log, got: {log}"
-    )
+    assert log.get("loss_stub_active", True) is False or log.get("loss_stub_active", 0.0) == 0.0
+    assert "Train/loss" in log
+    assert "Train/loss_tilt" in log
 
 
-def test_tsm_stub_checkpoint_saved(tmp_path: Path):
-    """Checkpoint embeds stub_active=True when TSM is unimplemented."""
+def test_tsm_checkpoint_stub_active_false(tmp_path: Path):
+    """Checkpoint embeds stub_active=False when TSM is fully implemented."""
     trainer = _make_trainer(tilt=1.0, tmp_path=tmp_path)
     trainer.train_epoch([_STUB_BATCH])
     ckpt_path = trainer.save_checkpoint()
-    ckpt = torch.load(ckpt_path, map_location="cpu")
-    assert ckpt["stub_active"] is True
+    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=True)
+    assert ckpt["stub_active"] is False
 
 
 # ── Multiple tilt values ──────────────────────────────────────────────
 
 @pytest.mark.parametrize("tilt", [-2.0, -1.0, 2.0, 5.0, 10.0])
-def test_tsm_stub_various_tilts_no_crash(tilt: float, tmp_path: Path):
-    """TSM stub handles all tilt values without crashing."""
+def test_tsm_various_tilts_run_backward(tilt: float, tmp_path: Path):
+    """All ablation tilt values complete a real backward pass."""
     trainer = _make_trainer(tilt=tilt, tmp_path=tmp_path)
     log = trainer.train_step(_STUB_BATCH)
-    assert log.get("loss_stub_active") is True
+    assert log.get("loss_stub_active") is False, f"tilt={tilt}: expected real loss, got {log}"
+    assert "Train/loss" in log

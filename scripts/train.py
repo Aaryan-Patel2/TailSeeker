@@ -63,8 +63,8 @@ def _run(cfg: DictConfig) -> None:
     }
     trainer = Trainer(model, trainer_cfg, output_dir)
 
-    # 6. Stub-mode dataloader (synthetic until QM9 is wired up)
-    dataloader = _make_stub_dataloader(cfg, device)
+    # 6. Dataloader — real QM9 if available, synthetic stub otherwise
+    dataloader = _make_dataloader(cfg, device)
 
     # 7. W&B (optional)
     wandb_run = _init_wandb(cfg, output_dir)
@@ -91,8 +91,6 @@ def _run(cfg: DictConfig) -> None:
             ckpt_path = trainer.save_checkpoint()
             print(f"  checkpoint saved → {ckpt_path}")
 
-        # one epoch is enough to verify the harness
-        break  # TODO: remove once QM9 dataloader is wired up
 
     if wandb_run is not None:
         wandb_run.finish()
@@ -100,13 +98,40 @@ def _run(cfg: DictConfig) -> None:
     print("[train.py] done.")
 
 
+def _make_dataloader(cfg: DictConfig, device: torch.device):
+    """Real QM9 DataLoader; falls back to synthetic stub if data unavailable."""
+    from torch.utils.data import DataLoader
+    from src.data.qm9 import QM9Dataset
+
+    data_root = Path(cfg.data.root)
+    download = bool(cfg.data.get("download", False))
+    try:
+        dataset = QM9Dataset(
+            root=data_root,
+            split="train",
+            max_atoms=int(cfg.data.max_atoms),
+            download=download,
+        )
+        print(f"[train.py] QM9 train split: {len(dataset)} molecules")
+        return DataLoader(
+            dataset,
+            batch_size=int(cfg.training.batch_size),
+            shuffle=True,
+            num_workers=int(cfg.data.num_workers),
+            collate_fn=QM9Dataset.collate_fn,
+        )
+    except (FileNotFoundError, RuntimeError, ImportError, AssertionError) as exc:
+        print(f"[train.py] QM9 unavailable ({exc}); using synthetic stub data")
+        return _make_stub_dataloader(cfg, device)
+
+
 def _make_stub_dataloader(cfg: DictConfig, device: torch.device):
-    """Return a single-batch iterable of synthetic data for stub mode."""
+    """Synthetic stub: shape matches real QM9 output (B, C, max_atoms, max_atoms)."""
     B = int(cfg.training.batch_size)
     C = int(cfg.model.in_channels)
-    # Use a small spatial size for fast stub runs
-    stub_batch = {"coords": torch.randn(B, C, 8, 8)}
-    return [stub_batch]  # one-element list = one batch per epoch
+    N = int(cfg.data.max_atoms)
+    stub_batch = {"coords": torch.randn(B, C, N, N)}
+    return [stub_batch]
 
 
 def _init_wandb(cfg: DictConfig, output_dir: Path):
