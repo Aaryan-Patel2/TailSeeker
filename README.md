@@ -36,7 +36,7 @@ uv venv --python 3.11 && source .venv/bin/activate
 uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
 # 3. Install dependencies
-uv pip install numpy pandas matplotlib seaborn tqdm wandb rdkit-pypi torch-geometric hydra-core omegaconf
+uv pip install numpy pandas matplotlib seaborn tqdm wandb rdkit torch-geometric hydra-core omegaconf scipy imageio
 
 # 4. Install this package in editable mode
 uv pip install -e ".[dev]"
@@ -56,13 +56,36 @@ python scripts/train.py
 python scripts/train.py loss.tilt=2.0 seed=1
 
 # Full ablation sweep (24 runs: 8 tilt values x 3 seeds)
-python scripts/train.py --multirun +experiment=ablation_tilt
-
-# Run tests
-pytest
+python scripts/train.py --multirun loss.tilt=-5,-2,-1,0,1,2,5,10 seed=0,1,2
 ```
 
 Outputs land in `outputs/<timestamp>/` (Hydra managed). Each run saves `config.yaml` and checkpoints to that directory.
+
+### Testing & Validation
+
+```bash
+# Plot ablation results (requires completed multirun)
+python scripts/plot_ablation.py
+# outputs to outputs/ablation_plots/{loss_curves,final_loss_vs_tilt,monotonicity_vs_tilt}.png
+
+# Run full test suite (109 tests: QM9 + smoke + unit + integration + theory)
+pytest
+
+# Smoke tests only (loss functions + shapes + gradients)
+pytest tests/test_smoke.py -v
+
+# Specific loss function tests
+pytest tests/unit/test_losses.py -v
+
+# Demo: show all loss functions in action (L_tilt ablation + L_MO)
+python scripts/demo_losses.py
+```
+
+The demo script validates:
+- ERM baseline (tilt=0)
+- Single-objective L_tilt at 8 ablation points (-5 to 10)
+- Multi-objective L_MO with Gumbel-Softmax group weighting
+- Numerical stability and gradient flow across all tilt values
 
 ### W&B Logging
 
@@ -123,9 +146,16 @@ TailSeeker/
 │
 ├── tests/
 │   ├── unit/
-│   │   └── test_losses.py            # Loss shape/value unit tests
-│   └── integration/
-│       └── test_train_one_step.py    # End-to-end single-step smoke test
+│   │   ├── test_losses.py            # Loss shape/value unit tests
+│   │   ├── test_theory.py            # Theory validation + gradcheck
+│   │   └── test_data.py              # Data encoding tests
+│   ├── integration/
+│   │   └── test_train_one_step.py    # End-to-end single-step smoke test
+│   ├── qm9/
+│   │   ├── conftest.py               # EDM batch fixtures (padded, uniform, with groups)
+│   │   ├── test_normalization.py     # Per-molecule MSE masking validation (7 tests)
+│   │   └── test_edm_injection.py     # EDM integration + term_aggregate tests (17 tests)
+│   └── test_smoke.py                 # Smoke tests for all loss functions (29 tests)
 │
 └── _archive/
     └── tailseeker_v1/                # Original package -- reference only, not imported

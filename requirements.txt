@@ -60,6 +60,8 @@ idna==3.11
     # via
     #   requests
     #   yarl
+imageio==2.37.3
+    # via tailseeker
 jinja2==3.1.6
     # via
     #   torch
@@ -177,7 +179,7 @@ pyyaml==6.0.3
     #   pytorch-lightning
     #   tailseeker
     #   wandb
-rdkit-pypi==2022.9.5
+rdkit==2026.3.1
     # via tailseeker
 requests==2.33.0
     # via
@@ -189,6 +191,8 @@ sentry-sdk==2.56.0
     # via wandb
 setuptools==82.0.1 ; python_full_version >= '3.12'
     # via torch
+scipy==1.17.1
+    # via tailseeker
 six==1.17.0
     # via python-dateutil
 smmap==5.0.3

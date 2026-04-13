@@ -5,7 +5,7 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
-from .base import BaseLoss, LossOutput
+from .base import BaseLoss, LossOutput, _per_molecule_mse
 
 
 class DDPMSimpleLoss(BaseLoss):
@@ -31,7 +31,7 @@ class DDPMSimpleLoss(BaseLoss):
         )
         B = pred.shape[0]
         # per-sample mean over all non-batch dims
-        per_sample = F.mse_loss(pred, target, reduction="none").view(B, -1).mean(dim=1)
+        per_sample = _per_molecule_mse(pred, target, kwargs.get("node_mask"))
         assert per_sample.shape == (B,), f"Expected ({B},), got {per_sample.shape}"
 
         total = per_sample.mean()

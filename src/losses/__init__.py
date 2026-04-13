@@ -1,5 +1,7 @@
 from .base import BaseLoss as BaseLoss
 from .base import LossOutput as LossOutput
+from .base import _per_molecule_mse as _per_molecule_mse
+from .base import term_aggregate as term_aggregate
 from .ddpm_simple import DDPMSimpleLoss as DDPMSimpleLoss
 from .hierarchical_loss import MultiObjectiveTiltedLoss as MultiObjectiveTiltedLoss
 from .hierarchical_loss import get_hierarchical_loss_fn as get_hierarchical_loss_fn

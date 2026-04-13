@@ -170,3 +170,10 @@ CLAUDE.md
 
 #UV-generated files
 .ruff_cache/
+
+#Experimentation Logs
+multirun/
+
+#Data files
+data/raw/
+tests/unit/

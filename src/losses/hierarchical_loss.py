@@ -17,7 +17,7 @@ from typing import Optional
 import torch
 import torch.nn.functional as F
 
-from .base import BaseLoss, LossOutput
+from .base import BaseLoss, LossOutput, _per_molecule_mse
 
 
 class MultiObjectiveTiltedLoss(BaseLoss):
@@ -74,7 +74,7 @@ class MultiObjectiveTiltedLoss(BaseLoss):
     ) -> LossOutput:
         assert pred.shape == target.shape, f"Shape mismatch: {pred.shape} vs {target.shape}"
         B = pred.shape[0]
-        per_sample = F.mse_loss(pred, target, reduction="none").view(B, -1).mean(dim=1)
+        per_sample = _per_molecule_mse(pred, target, kwargs.get("node_mask"))
         assert per_sample.shape == (B,), f"per_sample shape {per_sample.shape} != ({B},)"
 
         if groups is None:

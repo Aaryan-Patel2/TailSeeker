@@ -91,7 +91,8 @@ class QM9Dataset(Dataset):
                 "torch_geometric is required: uv pip install torch-geometric"
             ) from exc
 
-        self._pyg = _PyGQM9(root=str(self.root), download=download)
+        # Note: torch-geometric 2.7.0 QM9 auto-downloads if needed; download param not supported
+        self._pyg = _PyGQM9(root=str(self.root))
         lo, hi = _SPLIT_RANGES[split]
         total = len(self._pyg)
         assert total >= hi, (

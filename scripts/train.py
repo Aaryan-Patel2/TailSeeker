@@ -12,6 +12,8 @@ import sys
 import traceback
 from pathlib import Path
 
+import csv
+
 import hydra
 import torch
 from omegaconf import DictConfig, OmegaConf
@@ -73,6 +75,12 @@ def _run(cfg: DictConfig) -> None:
     tilt = float(cfg.loss.tilt)
     print(f"[train.py] tilt={tilt}  seed={cfg.seed}  device={device}  output={output_dir}")
 
+    # CSV loss log — one row per epoch, written incrementally
+    csv_path = output_dir / "losses.csv"
+    csv_file = open(csv_path, "w", newline="")
+    csv_writer = csv.DictWriter(csv_file, fieldnames=["epoch", "loss", "tilt", "seed"])
+    csv_writer.writeheader()
+
     for epoch in range(int(cfg.training.max_epochs)):
         epoch_log = trainer.train_epoch(dataloader)
 
@@ -82,6 +90,9 @@ def _run(cfg: DictConfig) -> None:
         else:
             loss_val = epoch_log.get("Train/loss", float("nan"))
             print(f"  epoch {epoch:04d}  loss={loss_val:.6f}")
+            csv_writer.writerow({"epoch": epoch, "loss": loss_val,
+                                 "tilt": float(cfg.loss.tilt), "seed": int(cfg.seed)})
+            csv_file.flush()
 
         if wandb_run is not None:
             wandb_run.log({"epoch": epoch, **epoch_log})
@@ -91,6 +102,7 @@ def _run(cfg: DictConfig) -> None:
             ckpt_path = trainer.save_checkpoint()
             print(f"  checkpoint saved → {ckpt_path}")
 
+    csv_file.close()
 
     if wandb_run is not None:
         wandb_run.finish()
@@ -120,8 +132,8 @@ def _make_dataloader(cfg: DictConfig, device: torch.device):
             num_workers=int(cfg.data.num_workers),
             collate_fn=QM9Dataset.collate_fn,
         )
-    except (FileNotFoundError, RuntimeError, ImportError, AssertionError) as exc:
-        print(f"[train.py] QM9 unavailable ({exc}); using synthetic stub data")
+    except (FileNotFoundError, RuntimeError, ImportError, AssertionError, AttributeError) as exc:
+        print(f"[train.py] QM9 unavailable ({type(exc).__name__}); using synthetic stub data")
         return _make_stub_dataloader(cfg, device)
 
 
