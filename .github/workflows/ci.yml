@@ -24,7 +24,7 @@ jobs:
         run: uv sync --frozen --all-groups
 
       - name: Lint
-        run: uv run ruff check .
+        run: .venv/bin/ruff check .
 
       - name: Run tests
-        run: uv run pytest tests/ -v
+        run: .venv/bin/pytest tests/ -v
