@@ -11,7 +11,6 @@ from src.models.ddpm_unet import DDPMUNet
 from src.training.trainer import Trainer
 from src.utils import set_seed
 
-
 _STUB_CFG = {
     "tilt": 0.0,        # overridden per test
     "schedule": "linear",

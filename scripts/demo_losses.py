@@ -13,8 +13,9 @@ from pathlib import Path
 # Ensure src/ is importable
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import torch
 import numpy as np
+import torch
+
 
 def main():
     print("=" * 80)
@@ -32,7 +33,10 @@ def main():
     per_sample = mse_loss(pred, target, reduction="none").view(B, -1).mean(dim=1)
 
     print(f"\nBatch shape: {pred.shape}")
-    print(f"Per-sample MSE: min={per_sample.min():.4f}, mean={per_sample.mean():.4f}, max={per_sample.max():.4f}")
+    min_mse = per_sample.min()
+    mean_mse = per_sample.mean()
+    max_mse = per_sample.max()
+    print(f"Per-sample MSE: min={min_mse:.4f}, mean={mean_mse:.4f}, max={max_mse:.4f}")
 
     # ========================================================================
     # 1. ERM BASELINE (tilt=0)
@@ -103,14 +107,14 @@ def main():
     output_mo = loss_mo(pred, target, groups=groups)
 
     print(f"\nMulti-objective loss (L_MO): {output_mo.total_loss.item():.6f}")
-    print(f"Components:")
+    print("Components:")
     for k, v in output_mo.loss_components.items():
         if isinstance(v, torch.Tensor):
             print(f"  {k}: {v.item():.6f}")
         else:
             print(f"  {k}: {v:.6f}")
 
-    print(f"\nGumbel-Softmax weights (group importance):")
+    print("\nGumbel-Softmax weights (group importance):")
     print(f"  Group 0: {output_mo.weights[0].item():.4f}")
     print(f"  Group 1: {output_mo.weights[1].item():.4f}")
     print(f"  Sum: {output_mo.weights.sum().item():.4f} (must be 1.0)")

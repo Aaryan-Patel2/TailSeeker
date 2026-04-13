@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import torch
-import torch.nn.functional as F
 
 from .base import BaseLoss, LossOutput, _per_molecule_mse
 

@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Optional
-
-import math
 
 import torch
 import torch.nn as nn

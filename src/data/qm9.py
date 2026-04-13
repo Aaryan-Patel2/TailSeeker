@@ -8,7 +8,6 @@ from typing import Any
 import torch
 from torch.utils.data import Dataset
 
-
 # Standard QM9 split boundaries (deterministic by molecule index, no random seed).
 # Uses first 130 000 of 130 831 molecules to give round numbers.
 # train [0, 110 000), val [110 000, 120 000), test [120 000, 130 000).

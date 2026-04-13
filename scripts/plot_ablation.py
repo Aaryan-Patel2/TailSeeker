@@ -23,16 +23,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import matplotlib
 import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 import numpy as np
 import torch
-import torch.nn.functional as F
+from dotmap import DotMap
 
 from src.losses.tilted_score_matching import get_loss_fn
 from src.models.ddpm_unet import get_model
-from dotmap import DotMap
-
 
 # ── Fixed evaluation batch (same seed → reproducible reconstruction) ──────────
 EVAL_SEED = 0
@@ -46,7 +44,6 @@ SEEDS = [0, 1, 2]
 CHECKPOINT_EPOCHS = [1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
 # Colour map: blue (negative tilt) → grey (zero) → red (positive tilt)
-import matplotlib
 _CMAP_POS = matplotlib.colormaps["Reds"]
 _CMAP_NEG = matplotlib.colormaps["Blues"]
 
@@ -54,7 +51,6 @@ _CMAP_NEG = matplotlib.colormaps["Blues"]
 def tilt_color(t: float):
     vals = TILT_VALUES
     if t < 0:
-        idx = vals.index(t)
         neg_vals = [v for v in vals if v < 0]
         frac = (neg_vals.index(t) + 1) / len(neg_vals)
         return _CMAP_NEG(0.4 + 0.5 * frac)
@@ -101,7 +97,6 @@ def eval_checkpoint(ckpt_path: Path, tilt: float, eval_batch: dict) -> float:
         x_t = alpha ** 0.5 * x0 + (1 - alpha) ** 0.5 * noise
 
         t_tensor = torch.full((B,), 500, dtype=torch.long, device=DEVICE)
-        from src.models.base import ModelOutput
         pred_noise = model(x_t, t_tensor).pred_noise
         loss_out = loss_fn(pred_noise, noise)
         return loss_out.total_loss.item()
@@ -118,7 +113,10 @@ def collect_results(multirun_dir: Path) -> dict:
     total_jobs = len(TILT_VALUES) * len(SEEDS)
     done = 0
 
-    for job_dir in sorted(multirun_dir.iterdir(), key=lambda p: int(p.name) if p.name.isdigit() else 999):
+    def _job_sort_key(p):
+        return int(p.name) if p.name.isdigit() else 999
+
+    for job_dir in sorted(multirun_dir.iterdir(), key=_job_sort_key):
         if not job_dir.is_dir() or not job_dir.name.isdigit():
             continue
         override = job_dir / ".hydra" / "overrides.yaml"
@@ -198,7 +196,8 @@ def plot_loss_curves(results: dict, out_dir: Path):
 
     ax.set_xlabel("Epoch", fontsize=12)
     ax.set_ylabel("Loss (eval on fixed batch)", fontsize=12)
-    ax.set_title("TailSeeker Ablation: Loss Curves per Tilt Value\n(mean ± std over 3 seeds)", fontsize=13)
+    title = "TailSeeker Ablation: Loss Curves per Tilt Value\n(mean ± std over 3 seeds)"
+    ax.set_title(title, fontsize=13)
     ax.legend(loc="upper right", fontsize=9, ncol=2)
     ax.grid(alpha=0.3)
     plt.tight_layout()
@@ -224,14 +223,17 @@ def plot_final_loss_vs_tilt(results: dict, out_dir: Path):
     fig, ax = plt.subplots(figsize=(9, 5))
     colors = [tilt_color(t) for t in tilts]
     x = np.arange(len(tilts))
-    bars = ax.bar(x, means, yerr=stds, color=colors, capsize=5, width=0.6, edgecolor="black", linewidth=0.8)
+    bars = ax.bar(x, means, yerr=stds, color=colors, capsize=5, width=0.6,
+                  edgecolor="black", linewidth=0.8)
 
     # Highlight ERM baseline
     if 0.0 in tilts:
         erm_idx = tilts.index(0.0)
         bars[erm_idx].set_edgecolor("black")
         bars[erm_idx].set_linewidth(2.5)
-        ax.axhline(means[erm_idx], color="dimgray", linestyle="--", linewidth=1.2, alpha=0.6, label=f"ERM baseline = {means[erm_idx]:.4f}")
+        erm_label = f"ERM baseline = {means[erm_idx]:.4f}"
+        ax.axhline(means[erm_idx], color="dimgray", linestyle="--",
+                   linewidth=1.2, alpha=0.6, label=erm_label)
 
     ax.set_xticks(x)
     ax.set_xticklabels([f"{t:+g}" for t in tilts], fontsize=11)
@@ -271,7 +273,8 @@ def plot_monotonicity(results: dict, out_dir: Path):
 
     ax.set_xlabel("Tilt (τ)", fontsize=12)
     ax.set_ylabel("Mean Loss across Seeds", fontsize=12)
-    ax.set_title("Loss vs. Tilt at Selected Epochs\n(Jensen's inequality: t>0 raises loss above ERM)", fontsize=13)
+    title = "Loss vs. Tilt at Selected Epochs\n(Jensen's inequality: t>0 raises loss above ERM)"
+    ax.set_title(title, fontsize=13)
     ax.legend(fontsize=11)
     ax.axvline(0, color="gray", linestyle="--", linewidth=1, alpha=0.5)
     ax.grid(alpha=0.3)

@@ -41,8 +41,8 @@ ABLATION_TILTS = [-5.0, -2.0, -1.0, 0.0, 1.0, 2.0, 5.0, 10.0]
 
 def test_tilt_zero_matches_edm_baseline(edm_batch):
     """get_loss_fn(0.0) with node_mask reproduces EDM's naive mean over valid atoms."""
-    from src.losses.tilted_score_matching import get_loss_fn
     from src.losses.base import _per_molecule_mse
+    from src.losses.tilted_score_matching import get_loss_fn
 
     pred, target, node_mask = edm_batch["pred"], edm_batch["target"], edm_batch["node_mask"]
 
@@ -86,8 +86,8 @@ def test_tilt_zero_with_mask_differs_from_naive_mean(edm_batch):
 
 def test_v1_jensen_holds_after_masking(edm_batch):
     """L_tilt(t>0) >= masked mean MSE — Jensen must still hold after masking."""
-    from src.losses.tilted_score_matching import TiltedScoreMatchingLoss
     from src.losses.base import _per_molecule_mse
+    from src.losses.tilted_score_matching import TiltedScoreMatchingLoss
 
     pred, target, node_mask = edm_batch["pred"], edm_batch["target"], edm_batch["node_mask"]
 

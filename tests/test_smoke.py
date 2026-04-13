@@ -10,7 +10,6 @@ Tests cover:
 import pytest
 import torch
 
-
 # ==============================================================================
 # src/losses/ddpm_simple.py — ERM Baseline
 # ==============================================================================
@@ -299,7 +298,7 @@ class TestMultiObjectiveTiltedLoss:
         output = loss_fn(pred, target)
         output.total_loss.backward()
         assert pred.grad is not None, "No gradients computed"
-        assert pred.grad.shape == pred.shape, f"Gradient shape mismatch"
+        assert pred.grad.shape == pred.shape, "Gradient shape mismatch"
 
     def test_numerical_stability(self):
         """MultiObjectiveTiltedLoss is numerically stable across tilt magnitudes."""
@@ -324,15 +323,15 @@ class TestLossFactory:
 
     def test_get_loss_fn_tilt_zero_returns_erm(self):
         """get_loss_fn(0.0) returns DDPMSimpleLoss."""
-        from src.losses.tilted_score_matching import get_loss_fn
         from src.losses.ddpm_simple import DDPMSimpleLoss
+        from src.losses.tilted_score_matching import get_loss_fn
 
         loss_fn = get_loss_fn(0.0)
         assert isinstance(loss_fn, DDPMSimpleLoss), f"Expected DDPMSimpleLoss, got {type(loss_fn)}"
 
     def test_get_loss_fn_nonzero_tilt_returns_tsm(self):
         """get_loss_fn(t≠0) returns TiltedScoreMatchingLoss."""
-        from src.losses.tilted_score_matching import get_loss_fn, TiltedScoreMatchingLoss
+        from src.losses.tilted_score_matching import TiltedScoreMatchingLoss, get_loss_fn
 
         for tilt in [-2.0, 0.5, 1.0, 5.0]:
             loss_fn = get_loss_fn(tilt)
@@ -343,8 +342,8 @@ class TestLossFactory:
     def test_get_hierarchical_loss_fn_returns_multi_objective(self):
         """get_hierarchical_loss_fn returns MultiObjectiveTiltedLoss."""
         from src.losses.hierarchical_loss import (
-            get_hierarchical_loss_fn,
             MultiObjectiveTiltedLoss,
+            get_hierarchical_loss_fn,
         )
 
         loss_fn = get_hierarchical_loss_fn(outer_tilt=1.0, group_tilts=[1.0, 2.0])
@@ -362,8 +361,8 @@ class TestLossComparison:
 
     def test_all_losses_run_without_error(self):
         """All loss functions run successfully on identical inputs."""
-        from src.losses.tilted_score_matching import get_loss_fn
         from src.losses.hierarchical_loss import get_hierarchical_loss_fn
+        from src.losses.tilted_score_matching import get_loss_fn
 
         torch.manual_seed(42)
         pred = torch.randn(4, 3, 8, 8)

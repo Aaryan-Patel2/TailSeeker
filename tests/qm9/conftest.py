@@ -13,7 +13,6 @@ from __future__ import annotations
 import pytest
 import torch
 
-
 MAX_ATOMS = 9
 N_FEAT = 8   # 3 xyz + 5 atom-type one-hot (EDM default)
 

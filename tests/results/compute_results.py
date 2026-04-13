@@ -5,15 +5,19 @@ Run from repo root:
 """
 
 from __future__ import annotations
-import math, sys
+
+import math
+import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import torch
 import torch.nn.functional as F
-from src.losses.tilted_score_matching import TiltedScoreMatchingLoss, get_loss_fn
+
 from src.losses.ddpm_simple import DDPMSimpleLoss
 from src.losses.hierarchical_loss import MultiObjectiveTiltedLoss
+from src.losses.tilted_score_matching import TiltedScoreMatchingLoss
 
 
 def fmt(x, d=6):
@@ -195,15 +199,15 @@ print(f"\nGumbel λ=1e-3 weights: {[fmt(x,4) for x in results['gumbel_low_temp_w
       f"(max={fmt(results['gumbel_low_temp_max_w'])})")
 print(f"Gumbel λ=10  weights: {[fmt(x,4) for x in results['gumbel_high_temp_weights']]}")
 
-print(f"\nConvexity (Lemma 5):")
+print("\nConvexity (Lemma 5):")
 for t, v in results["convexity"].items():
     print(f"  t={t}: L_t(avg)={fmt(v['L_avg'])}, avg(L_t)={fmt(v['avg_L'])}, "
           f"gap={fmt(v['gap'])} ({'OK' if v['gap']>=-1e-5 else 'FAIL'})")
 
-print(f"\nInvalid latent:")
+print("\nInvalid latent:")
 for label, v in results["invalid_latent"].items():
     print(f"  {label}: ERM={fmt(v['erm'])}, TSM(t=1)={fmt(v['tsm_t1'])}")
 
-print(f"\nlogsumexp stress test (max_f ≈ 1e5):")
+print("\nlogsumexp stress test (max_f ≈ 1e5):")
 for t, v in results["logsumexp_stress"].items():
     print(f"  t={t}: loss={fmt(v['loss'])}, max_f={fmt(v['max_f'])}, finite={v['is_finite']}")

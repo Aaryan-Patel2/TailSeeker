@@ -8,11 +8,10 @@ Usage:
 
 from __future__ import annotations
 
+import csv
 import sys
 import traceback
 from pathlib import Path
-
-import csv
 
 import hydra
 import torch
@@ -113,6 +112,7 @@ def _run(cfg: DictConfig) -> None:
 def _make_dataloader(cfg: DictConfig, device: torch.device):
     """Real QM9 DataLoader; falls back to synthetic stub if data unavailable."""
     from torch.utils.data import DataLoader
+
     from src.data.qm9 import QM9Dataset
 
     data_root = Path(cfg.data.root)
