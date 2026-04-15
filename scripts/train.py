@@ -56,28 +56,45 @@ def _run(cfg: DictConfig) -> None:
     # 4. Model
     model = get_model(cfg.model).to(device)
 
-    # 5. Trainer
+    # 5. Loss function — single-objective or multi-objective
+    loss_mode: str = str(cfg.loss.get("mode", "single"))
+    if loss_mode == "multi":
+        from src.losses.hierarchical_loss import get_hierarchical_loss_fn
+        loss_fn = get_hierarchical_loss_fn(
+            outer_tilt=float(cfg.loss.outer_tilt),
+            group_tilts=list(cfg.loss.group_tilts),
+            gumbel_temp=float(cfg.loss.gumbel_temp),
+        )
+        print(f"[train.py] loss=multi  outer_tilt={cfg.loss.outer_tilt}  "
+              f"group_tilts={list(cfg.loss.group_tilts)}  gumbel_temp={cfg.loss.gumbel_temp}")
+    else:
+        loss_fn = None  # Trainer builds get_loss_fn(tilt) internally
+
+    # 6. Trainer
     trainer_cfg = {
         **OmegaConf.to_container(cfg.loss, resolve=True),
         **OmegaConf.to_container(cfg.diffusion, resolve=True),
         **OmegaConf.to_container(cfg.training, resolve=True),
     }
-    trainer = Trainer(model, trainer_cfg, output_dir)
+    trainer = Trainer(model, trainer_cfg, output_dir, loss_fn=loss_fn)
 
-    # 6. Dataloader — real QM9 if available, synthetic stub otherwise
+    # 7. Dataloader — real QM9 if available, synthetic stub otherwise
     dataloader = _make_dataloader(cfg, device)
 
-    # 7. W&B (optional)
+    # 8. W&B (optional)
     wandb_run = _init_wandb(cfg, output_dir)
 
-    # 8. Train
+    # 9. Train
     tilt = float(cfg.loss.tilt)
-    print(f"[train.py] tilt={tilt}  seed={cfg.seed}  device={device}  output={output_dir}")
+    print(f"[train.py] mode={loss_mode}  tilt={tilt}  seed={cfg.seed}  "
+          f"device={device}  output={output_dir}")
 
     # CSV loss log — one row per epoch, written incrementally
     csv_path = output_dir / "losses.csv"
     csv_file = open(csv_path, "w", newline="")
-    csv_writer = csv.DictWriter(csv_file, fieldnames=["epoch", "loss", "tilt", "seed"])
+    csv_writer = csv.DictWriter(
+        csv_file, fieldnames=["epoch", "loss", "tilt", "mode", "seed"]
+    )
     csv_writer.writeheader()
 
     for epoch in range(int(cfg.training.max_epochs)):
@@ -89,8 +106,10 @@ def _run(cfg: DictConfig) -> None:
         else:
             loss_val = epoch_log.get("Train/loss", float("nan"))
             print(f"  epoch {epoch:04d}  loss={loss_val:.6f}")
-            csv_writer.writerow({"epoch": epoch, "loss": loss_val,
-                                 "tilt": float(cfg.loss.tilt), "seed": int(cfg.seed)})
+            csv_writer.writerow({
+                "epoch": epoch, "loss": loss_val,
+                "tilt": float(cfg.loss.tilt), "mode": loss_mode, "seed": int(cfg.seed),
+            })
             csv_file.flush()
 
         if wandb_run is not None:

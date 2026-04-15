@@ -17,6 +17,7 @@ from omegaconf import DictConfig
 from src.diffusion.forward_process import q_sample
 from src.diffusion.noise_schedule import get_schedule, precompute_schedule
 from src.losses.base import LossOutput
+from src.losses.base import BaseLoss
 from src.losses.tilted_score_matching import get_loss_fn
 from src.models.base import ModelOutput
 
@@ -30,14 +31,25 @@ class Trainer:
         output_dir: directory for checkpoints and logs.
     """
 
-    def __init__(self, model: nn.Module, cfg: DictConfig, output_dir: Path) -> None:
+    def __init__(
+        self,
+        model: nn.Module,
+        cfg: DictConfig,
+        output_dir: Path,
+        loss_fn: BaseLoss | None = None,
+    ) -> None:
         self.model = model
         self.cfg = cfg
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        tilt: float = float(cfg.get("tilt", 1.0))
-        self.loss_fn = get_loss_fn(tilt)
+        # Caller may supply a pre-built loss (e.g. MultiObjectiveTiltedLoss).
+        # Falls back to single-objective get_loss_fn(tilt) for backwards compat.
+        if loss_fn is not None:
+            self.loss_fn = loss_fn
+        else:
+            tilt: float = float(cfg.get("tilt", 1.0))
+            self.loss_fn = get_loss_fn(tilt)
         self._stub_active = False  # set True when NotImplementedError is caught
 
         # build noise schedule and move to target device later
@@ -84,8 +96,13 @@ class Trainer:
 
         log: dict[str, Any] = {}
 
+        # Pass group labels to loss_fn if available (multi-objective mode).
+        loss_kwargs = {}
+        if "group" in batch:
+            loss_kwargs["groups"] = batch["group"].to(device)
+
         try:
-            loss_out: LossOutput = self.loss_fn(pred, noise)
+            loss_out: LossOutput = self.loss_fn(pred, noise, **loss_kwargs)
             self._stub_active = False
 
             self.optimizer.zero_grad()

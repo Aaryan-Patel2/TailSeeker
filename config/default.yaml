@@ -15,8 +15,15 @@ model:
 
 # ── Loss ─────────────────────────────────────────────────────────────
 loss:
-  tilt: 1.0               # TERM temperature; 0.0 = standard ERM (DDPMSimpleLoss)
+  mode: single            # "single" | "multi"
+                          #   single → get_loss_fn(tilt)
+                          #   multi  → get_hierarchical_loss_fn(outer_tilt, group_tilts, gumbel_temp)
+  tilt: 1.0               # single-objective TERM temperature; 0.0 = ERM (DDPMSimpleLoss)
                           # ablation axis: [-5,-2,-1,0,1,2,5,10]
+  # Multi-objective settings (only used when mode: multi)
+  outer_tilt: 1.0         # τ across pharmacological groups
+  group_tilts: [1.0, 2.0, 5.0]  # per-group inner tilts [low-QED, mid-QED, high-QED]
+  gumbel_temp: 1.0        # Gumbel-Softmax temperature λ; anneal toward 0 over training
 
 # ── Diffusion schedule ───────────────────────────────────────────────
 diffusion:
