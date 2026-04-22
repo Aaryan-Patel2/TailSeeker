@@ -1,0 +1,23 @@
+# Colab-compatible extra dependencies for TailSeeker + EDM full-scale experiments.
+# Colab ships with PyTorch already; these are the additional libraries only.
+#
+# NOTE: torch-geometric, torch-scatter, torch-sparse are installed separately
+# in Cell 3 of edm_ablation.ipynb with the correct CUDA-versioned wheel URL.
+# Do NOT add them here — version conflicts with newer CUDA builds (12.4+) will
+# cause pip to hang or fail.
+
+# Molecular / chemistry
+rdkit==2024.3.5
+
+# Config & experiment management
+hydra-core==1.3.2
+omegaconf==2.3.0
+
+# Logging
+wandb==0.17.3
+
+# Numerical / plotting
+scipy==1.13.1
+imageio==2.34.1
+matplotlib==3.9.0
+seaborn==0.13.2

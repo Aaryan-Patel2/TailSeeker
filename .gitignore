@@ -167,6 +167,7 @@ outputs
 .claude/
 .llm/
 CLAUDE.md
+docs/superpowers/
 
 #UV-generated files
 .ruff_cache/

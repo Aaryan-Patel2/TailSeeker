@@ -15,15 +15,24 @@ model:
 
 # ── Loss ─────────────────────────────────────────────────────────────
 loss:
-  mode: single            # "single" | "multi"
+  mode: single            # "single" | "multi" | "reward"
                           #   single → get_loss_fn(tilt)
                           #   multi  → get_hierarchical_loss_fn(outer_tilt, group_tilts, gumbel_temp)
+                          #   reward → get_reward_loss_fn(tilt, lambda, warmup_frac)
   tilt: 1.0               # single-objective TERM temperature; 0.0 = ERM (DDPMSimpleLoss)
                           # ablation axis: [-5,-2,-1,0,1,2,5,10]
   # Multi-objective settings (only used when mode: multi)
   outer_tilt: 1.0         # τ across pharmacological groups
   group_tilts: [1.0, 2.0, 5.0]  # per-group inner tilts [low-QED, mid-QED, high-QED]
   gumbel_temp: 1.0        # Gumbel-Softmax temperature λ; anneal toward 0 over training
+  # Reward-tilt settings (only used when mode: reward)
+  reward_tilt:
+    tilt: 2.0             # Gibbs temperature over reward; 0.0 = ERM
+                          # ablation axis: [-2,-1,0,1,2,5]
+    lambda: 0.5           # SA penalty weight: r = QED - λ·(SA-1)/9
+    warmup_frac: 0.3      # fraction of training to linearly warm up tilt (0 = no warmup)
+    lambda_logp: 0.3      # LogP penalty weight: penalises LogP > 3 (too lipophilic)
+    lambda_tpsa: 0.2      # TPSA reward weight: rewards low polar surface area (<140 Å²)
 
 # ── Diffusion schedule ───────────────────────────────────────────────
 diffusion:

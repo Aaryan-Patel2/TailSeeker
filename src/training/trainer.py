@@ -96,10 +96,22 @@ class Trainer:
 
         log: dict[str, Any] = {}
 
-        # Pass group labels to loss_fn if available (multi-objective mode).
-        loss_kwargs = {}
+        # Pass auxiliary batch keys to loss_fn based on what's available.
+        # group  → multi-objective mode (MultiObjectiveTiltedLoss)
+        # qed/sa → reward-tilt mode (RewardWeightedTiltedLoss)
+        # epoch/max_epochs → tilt annealing inside RewardWeightedTiltedLoss
+        loss_kwargs: dict = {}
         if "group" in batch:
             loss_kwargs["groups"] = batch["group"].to(device)
+        if "qed" in batch and "sa" in batch:
+            loss_kwargs["qed"] = batch["qed"].to(device)
+            loss_kwargs["sa"] = batch["sa"].to(device)
+            loss_kwargs["epoch"] = self._epoch
+            loss_kwargs["max_epochs"] = int(self.cfg.get("max_epochs", 100))
+        if "logp" in batch:
+            loss_kwargs["logp"] = batch["logp"].to(device)
+        if "tpsa" in batch:
+            loss_kwargs["tpsa"] = batch["tpsa"].to(device)
 
         try:
             loss_out: LossOutput = self.loss_fn(pred, noise, **loss_kwargs)
@@ -113,6 +125,8 @@ class Trainer:
             log["Train/loss"] = loss_out.total_loss.item()
             for k, v in loss_out.loss_components.items():
                 log[f"Train/loss_{k}"] = v.item() if hasattr(v, "item") else float(v)
+            for k, v in loss_out.diagnostics.items():
+                log[f"Train/{k}"] = float(v)
             log["loss_stub_active"] = False
 
         except NotImplementedError as exc:

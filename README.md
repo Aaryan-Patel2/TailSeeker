@@ -10,17 +10,39 @@ Target venue: **NeurIPS 2026 Workshop on ML for Drug Discovery**.
 
 ## Core Idea
 
-Standard diffusion training minimizes average loss (ERM), which treats rare, high-property molecules the same as common ones. TailSeeker introduces a tilt parameter `t` that up-weights high-loss samples during training:
+TailSeeker introduces two complementary tilting mechanisms, both expressed as Gibbs-measure reweighting of the DDPM score-matching objective.
+
+### TERM-Tilt (V1 — mathematical contribution)
+
+Replaces the mean loss with a log-sum-exp tilt over reconstruction errors:
 
 ```
 L_tilt = (1/t) * log( (1/B) sum_i exp(t * l_i) )
 ```
 
-- `t = 0` — standard ERM (DDPMSimpleLoss baseline)
-- `t > 0` — up-weights hard/rare samples (tail-seeking)
-- `t < 0` — down-weights hard samples (reverse tilt, ablation control)
+- `t = 0` — ERM (DDPMSimpleLoss baseline)
+- `t > 0` — up-weights high-loss (hard-to-reconstruct) samples
+- `t < 0` — down-weights hard samples (robustness direction)
 
-At `t -> 0`, the loss recovers standard ERM exactly. The ablation axis sweeps `t in {-5, -2, -1, 0, 1, 2, 5, 10}` over 3 seeds (24 total runs).
+Jensen's inequality guarantees `L_tilt(t>0) ≥ ERM ≥ L_tilt(t<0)`. Empirically verified across 24 ablation runs (8 tilt values × 3 seeds).
+
+### Reward-Tilt (V2 — biological contribution)
+
+Tilts training toward chemically valuable molecules by weighting the loss with a *property-based* Gibbs measure:
+
+```
+r_i   = QED(mol_i) - λ · (SA(mol_i) - 1) / 9   [composite reward, λ=0.5]
+w_i   = softmax(t · r_i)                         [reward Gibbs weights]
+L_RT  = sum_i w_i · l_i                          [reward-weighted regression]
+```
+
+- `t > 0` — up-weights high-reward (drug-like) molecules during training
+- `t = 0` — ERM (uniform weights)
+- Includes linear warmup schedule and ERM fallback when batch reward variance is too low
+
+**Stationary point:** the score function of `p̃(x) ∝ p_data(x) · exp(t · r(x))` — equivalent to training-time classifier guidance (Dhariwal & Nichol 2021). This is the biologically interpretable contribution: positive tilt provably emphasizes high-QED molecules, not merely hard-to-reconstruct ones.
+
+The ablation axis for reward-tilt sweeps `t in {-2, -1, 0, 1, 2, 5}` over 3 seeds (18 total runs). Primary metric: `cvar_qed_01` (mean QED of top 1% generated molecules).
 
 ---
 
@@ -49,14 +71,21 @@ uv pip install -e ".[dev]"
 ## Running Experiments
 
 ```bash
-# Single run with default config (tilt=1.0, seed=42)
+# Single run — TERM-tilt (default config, tilt=1.0, seed=42)
 python scripts/train.py
 
-# Override any config key via Hydra
-python scripts/train.py loss.tilt=2.0 seed=1
-
-# Full ablation sweep (24 runs: 8 tilt values x 3 seeds)
+# TERM-tilt ablation (24 runs: 8 tilt values × 3 seeds)
 python scripts/train.py --multirun loss.tilt=-5,-2,-1,0,1,2,5,10 seed=0,1,2
+
+# Reward-tilt single run
+python scripts/train.py loss.mode=reward loss.reward_tilt.tilt=2.0 seed=42
+
+# Reward-tilt ablation (18 runs: 6 tilt values × 3 seeds)
+python scripts/train.py --multirun loss.mode=reward loss.reward_tilt.tilt=-2,-1,0,1,2,5 seed=0,1,2
+
+# Multi-objective run
+python scripts/train.py loss.mode=multi loss.outer_tilt=1.0 \
+  "loss.group_tilts=[1.0,2.0,5.0]" loss.gumbel_temp=1.0
 ```
 
 Outputs land in `outputs/<timestamp>/` (Hydra managed). Each run saves `config.yaml` and checkpoints to that directory.
@@ -110,12 +139,14 @@ TailSeeker/
 │   ├── losses/
 │   │   ├── base.py                   # BaseLoss ABC + LossOutput dataclass
 │   │   ├── ddpm_simple.py            # ERM baseline (tilt=0), fully implemented
-│   │   ├── tilted_score_matching.py  # V1: single-objective TERM loss (L_tilt) — implemented
-│   │   └── hierarchical_loss.py      # V2: multi-objective J̃ + L_MO (Gumbel-Softmax) — implemented
+│   │   ├── tilted_score_matching.py  # V1: single-objective TERM loss (L_tilt)
+│   │   ├── hierarchical_loss.py      # V2: multi-objective J̃ + L_MO (Gumbel-Softmax)
+│   │   └── reward_weighted_loss.py   # V3: reward-tilt L_RT (biological contribution)
 │   │
 │   ├── models/
 │   │   ├── base.py                   # BaseModel ABC + ModelOutput dataclass
-│   │   └── ddpm_unet.py              # U-Net score network; get_model() factory
+│   │   ├── ddpm_unet.py              # U-Net score network; get_model() factory
+│   │   └── edm_adapter.py            # Surgical patch: injects term_aggregate into EDM
 │   │
 │   ├── diffusion/
 │   │   ├── noise_schedule.py         # Linear/cosine beta schedules + precomputation
@@ -139,8 +170,13 @@ TailSeeker/
 │   │
 │   └── utils.py                      # set_seed(), misc helpers
 │
+├── notebooks/
+│   ├── colab_setup.ipynb             # One-time Drive/repo/dep setup for Colab
+│   └── colab_edm_ablation.ipynb      # Full 8-tilt × 3-seed GPU ablation runner
+│
 ├── config/
 │   ├── default.yaml                  # All hyperparameters with inline comments
+│   ├── edm_ablation.yaml             # Full-scale EDM ablation config (Drive-backed)
 │   └── experiment/
 │       └── ablation_tilt.yaml        # Multirun sweep: tilt x seed = 24 runs
 │
@@ -171,6 +207,43 @@ TailSeeker/
 | `src/training/trainer.py` | Training loop. Full backward pass for all tilt values (loss is implemented). |
 | `config/default.yaml` | Single source of truth for all hyperparameters. Override at runtime via Hydra. |
 | `src/metrics/tail.py` | Primary evaluation: right-CVaR and tail improvement ratio vs. baseline. |
+
+---
+
+## Full-Scale EDM Experiments (Google Colab)
+
+The full ablation runs **EDM** ([ehoogeboom/e3_diffusion_for_molecules](https://github.com/ehoogeboom/e3_diffusion_for_molecules)) as the backbone on real QM9 with GPU acceleration via Colab. The only change to EDM is replacing `nll.mean(0)` with `term_aggregate(nll, tilt)` — everything else (EGNN, EMA, noise schedule) is untouched.
+
+### One-time setup (run once per Colab account)
+
+Open `notebooks/colab_setup.ipynb` in Colab (**T4 GPU** runtime). It will:
+1. Mount Google Drive and create `/MyDrive/TailSeeker/{repo,edm,data,outputs}/`
+2. Clone TailSeeker and EDM (pinned commit) to Drive
+3. Install all dependencies (`requirements-colab.txt`)
+4. Download QM9 (~100 MB) to Drive
+
+### Running experiments
+
+Open `notebooks/colab_edm_ablation.ipynb`. Edit Cell 2 to set tilt values, seeds, and epoch budget, then run all cells. Each (tilt, seed) pair calls:
+
+```bash
+python scripts/run_edm_ablation.py \
+    --config-name edm_ablation \
+    loss.tilt=1.0 seed=0 \
+    edm.repo_path=/drive/MyDrive/TailSeeker/edm \
+    data.root=/drive/MyDrive/TailSeeker/data \
+    output.root=/drive/MyDrive/TailSeeker/outputs
+```
+
+Outputs per run land in `outputs/tilt{τ}_seed{s}/`: `config.yaml`, `metrics.csv`, checkpoints.
+
+### EDM injection
+
+`src/models/edm_adapter.py` performs an in-memory source patch:
+- Finds `nll = nll.mean(0)` in EDM's `qm9/losses.py` at runtime
+- Replaces with `nll = term_aggregate(nll, tilt)` (our TERM aggregator)
+- Verifiable: `tilt=0` must match `nll.mean(0)` bit-for-bit (`verify_patch()`)
+- Reversible: `unpatch_loss()` / context-manager `with EDMAdapter(...): ...`
 
 ---
 

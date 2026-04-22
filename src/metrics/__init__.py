@@ -3,6 +3,8 @@ from .distributional import wasserstein_1d as wasserstein_1d
 from .molecular import mean_qed as mean_qed
 from .molecular import mean_sa as mean_sa
 from .molecular import uniqueness as uniqueness
+from .molecular import diversity as diversity
+from .molecular import novelty as novelty
 from .molecular import validity as validity
 from .tail import right_cvar as right_cvar
 from .tail import tail_improvement_ratio as tail_improvement_ratio

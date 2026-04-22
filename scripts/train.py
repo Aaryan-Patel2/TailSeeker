@@ -56,7 +56,7 @@ def _run(cfg: DictConfig) -> None:
     # 4. Model
     model = get_model(cfg.model).to(device)
 
-    # 5. Loss function — single-objective or multi-objective
+    # 5. Loss function — single-objective, multi-objective, or reward-tilt
     loss_mode: str = str(cfg.loss.get("mode", "single"))
     if loss_mode == "multi":
         from src.losses.hierarchical_loss import get_hierarchical_loss_fn
@@ -67,6 +67,19 @@ def _run(cfg: DictConfig) -> None:
         )
         print(f"[train.py] loss=multi  outer_tilt={cfg.loss.outer_tilt}  "
               f"group_tilts={list(cfg.loss.group_tilts)}  gumbel_temp={cfg.loss.gumbel_temp}")
+    elif loss_mode == "reward":
+        from src.losses.reward_weighted_loss import get_reward_loss_fn
+        rt = cfg.loss.reward_tilt
+        loss_fn = get_reward_loss_fn(
+            tilt=float(rt.tilt),
+            lambda_=float(rt.get("lambda", 0.5)),
+            warmup_frac=float(rt.get("warmup_frac", 0.3)),
+            lambda_logp=float(rt.get("lambda_logp", 0.0)),
+            lambda_tpsa=float(rt.get("lambda_tpsa", 0.0)),
+        )
+        print(f"[train.py] loss=reward  tilt={rt.tilt}  lambda={rt.get('lambda', 0.5)}  "
+              f"lambda_logp={rt.get('lambda_logp', 0.0)}  "
+              f"lambda_tpsa={rt.get('lambda_tpsa', 0.0)}")
     else:
         loss_fn = None  # Trainer builds get_loss_fn(tilt) internally
 
@@ -85,16 +98,17 @@ def _run(cfg: DictConfig) -> None:
     wandb_run = _init_wandb(cfg, output_dir)
 
     # 9. Train
-    tilt = float(cfg.loss.tilt)
+    tilt = (float(cfg.loss.reward_tilt.tilt) if loss_mode == "reward"
+            else float(cfg.loss.tilt))
     print(f"[train.py] mode={loss_mode}  tilt={tilt}  seed={cfg.seed}  "
           f"device={device}  output={output_dir}")
 
     # CSV loss log — one row per epoch, written incrementally
     csv_path = output_dir / "losses.csv"
     csv_file = open(csv_path, "w", newline="")
-    csv_writer = csv.DictWriter(
-        csv_file, fieldnames=["epoch", "loss", "tilt", "mode", "seed"]
-    )
+    csv_fields = ["epoch", "loss", "tilt", "mode", "seed",
+                  "mean_reward_weight", "reward_std", "reward_erm_fallback"]
+    csv_writer = csv.DictWriter(csv_file, fieldnames=csv_fields, extrasaction="ignore")
     csv_writer.writeheader()
 
     for epoch in range(int(cfg.training.max_epochs)):
@@ -105,10 +119,20 @@ def _run(cfg: DictConfig) -> None:
             print(f"  epoch {epoch:04d}  loss_stub_active=True  (backward skipped)")
         else:
             loss_val = epoch_log.get("Train/loss", float("nan"))
-            print(f"  epoch {epoch:04d}  loss={loss_val:.6f}")
+            reward_info = ""
+            if loss_mode == "reward":
+                t_eff = epoch_log.get("Train/reward_tilt_t_eff", float("nan"))
+                r_std = epoch_log.get("Train/reward_std", float("nan"))
+                reward_info = f"  t_eff={t_eff:.3f}  reward_std={r_std:.3f}"
+            print(f"  epoch {epoch:04d}  loss={loss_val:.6f}{reward_info}")
+            tilt_val = (float(cfg.loss.reward_tilt.tilt) if loss_mode == "reward"
+                        else float(cfg.loss.tilt))
             csv_writer.writerow({
                 "epoch": epoch, "loss": loss_val,
-                "tilt": float(cfg.loss.tilt), "mode": loss_mode, "seed": int(cfg.seed),
+                "tilt": tilt_val, "mode": loss_mode, "seed": int(cfg.seed),
+                "mean_reward_weight": epoch_log.get("Train/reward_tilt_t_eff", ""),
+                "reward_std": epoch_log.get("Train/reward_std", ""),
+                "reward_erm_fallback": epoch_log.get("Train/reward_erm_fallback", ""),
             })
             csv_file.flush()
 
@@ -157,11 +181,25 @@ def _make_dataloader(cfg: DictConfig, device: torch.device):
 
 
 def _make_stub_dataloader(cfg: DictConfig, device: torch.device):
-    """Synthetic stub: shape matches real QM9 output (B, C, max_atoms, max_atoms)."""
+    """Synthetic stub: shape matches real QM9 output (B, C, max_atoms, max_atoms).
+
+    Includes qed/sa/group so reward-tilt and multi-objective modes work without data.
+    QED drawn from Beta(2,2) ≈ realistic drug-likeness distribution.
+    SA drawn uniformly from [1, 10].
+    """
     B = int(cfg.training.batch_size)
     C = int(cfg.model.in_channels)
     N = int(cfg.data.max_atoms)
-    stub_batch = {"coords": torch.randn(B, C, N, N)}
+    qed = torch.distributions.Beta(2.0, 2.0).sample((B,))          # (B,) in [0,1]
+    sa = torch.rand(B) * 9.0 + 1.0                                  # (B,) in [1,10]
+    stub_batch = {
+        "coords": torch.randn(B, C, N, N),
+        "qed": qed,
+        "sa": sa,
+        "logp": torch.randn(B) * 1.5 + 2.0,                         # LogP ~ N(2, 1.5)
+        "tpsa": torch.rand(B) * 100.0 + 20.0,                       # TPSA ~ U[20, 120] Å²
+        "group": (qed * 3).long().clamp(0, 2),
+    }
     return [stub_batch]
 
 

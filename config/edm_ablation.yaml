@@ -1,0 +1,64 @@
+# EDM full-scale ablation config.
+# Extends default.yaml; override only what changes for full-scale GPU runs.
+#
+# Usage (from Colab or CLI):
+#   python scripts/run_edm_ablation.py \
+#       --config-name edm_ablation \
+#       loss.tilt=1.0 seed=0 \
+#       edm.repo_path=/drive/MyDrive/TailSeeker/edm \
+#       data.root=/drive/MyDrive/TailSeeker/data \
+#       output.root=/drive/MyDrive/TailSeeker/outputs
+
+defaults:
+  - default
+  - _self_
+
+# ── EDM repo integration ───────────────────────────────────────────────────
+edm:
+  # Absolute path to cloned ehoogeboom/e3_diffusion_for_molecules.
+  # Set at runtime via CLI override (see colab_edm_ablation.ipynb Cell 2).
+  repo_path: ???
+  # Optional: path to pre-trained EDM checkpoint for warm-start.
+  # Leave null to train from scratch (standard ablation).
+  checkpoint: null
+  # EDM commit hash pinned in colab_setup.ipynb Cell 3.
+  # Recorded here for auditability — not used programmatically.
+  commit: "e3_v1_stable"
+
+# ── Ablation matrix ────────────────────────────────────────────────────────
+# These are the same 8 tilt values used in the synthetic ablation (CLAUDE.md).
+# run_edm_ablation.py accepts a single (tilt, seed) pair; the Colab notebook
+# launches the outer loop.
+ablation:
+  tilt_values: [-5, -2, -1, 0, 1, 2, 5, 10]
+  seeds: [0, 1, 2]
+  # Evaluate tail enrichment every N epochs.
+  eval_every: 10
+
+# ── Override training for full-scale ──────────────────────────────────────
+training:
+  learning_rate: 1.0e-4
+  batch_size: 64          # up from 32; GPU memory permitting
+  max_epochs: 100
+  grad_clip: 1.0
+  use_ema: true           # EMA essential for stable EDM training (per literature)
+
+# ── Data: real QM9 from Drive ─────────────────────────────────────────────
+data:
+  # Set at runtime via CLI override.
+  root: ???
+  max_atoms: 29
+  num_workers: 2          # Colab typically has 2 usable CPU workers
+  download: true          # download QM9 on first run; subsequent runs use cache
+
+# ── Output directory (Drive-backed) ───────────────────────────────────────
+output:
+  # Absolute path on Drive where per-run subdirs are created.
+  # Structure: {root}/{tilt}_{seed}/  (e.g. 1.0_0/, -2_1/, ...)
+  root: ???
+
+# ── W&B logging ────────────────────────────────────────────────────────────
+wandb:
+  project: tailseeker-edm-fullscale
+  entity: null            # set to your W&B username/team
+  mode: online

@@ -39,29 +39,29 @@ def _encode_molecule(
     return out
 
 
-def _compute_qed_sa(smiles: str) -> tuple[float, float]:
-    """Return (QED, SA score) for a SMILES string via RDKit.
+def _compute_properties(smiles: str) -> tuple[float, float, float, float]:
+    """Return (QED, SA, LogP, TPSA) for a SMILES string via RDKit.
 
-    Falls back to neutral defaults (qed=0.5, sa=5.0) if RDKit is unavailable
-    or the SMILES cannot be parsed.  SA score is on the [1, 10] scale where
-    lower = more synthetically accessible.
+    Falls back to neutral defaults if RDKit is unavailable or SMILES unparseable.
+    SA: [1, 10] lower = more accessible. LogP: Crippen. TPSA: Å² polar surface area.
     """
     try:
         from rdkit import Chem
-        from rdkit.Chem import QED
+        from rdkit.Chem import QED, Crippen, Descriptors
         try:
             from rdkit.Contrib.SA_Score import sascorer
         except ImportError:
             sascorer = None
-
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
-            return 0.5, 5.0
-        qed = QED.qed(mol)
-        sa = sascorer.calculateScore(mol) if sascorer is not None else 5.0
-        return float(qed), float(sa)
+            return 0.5, 5.0, 2.0, 60.0
+        qed = float(QED.qed(mol))
+        sa = float(sascorer.calculateScore(mol)) if sascorer is not None else 5.0
+        logp = float(Crippen.MolLogP(mol))
+        tpsa = float(Descriptors.TPSA(mol))
+        return qed, sa, logp, tpsa
     except Exception:
-        return 0.5, 5.0
+        return 0.5, 5.0, 2.0, 60.0
 
 
 class QM9Dataset(Dataset):
@@ -113,24 +113,33 @@ class QM9Dataset(Dataset):
         # Pre-compute QED/SA scores and QED-tertile group labels.
         # Results are cached to <root>/qm9_properties_<split>.pt so the
         # expensive RDKit pass runs only once (~2–5 min for train split).
-        cache_path = self.root / f"qm9_properties_{split}.pt"
+        # v2 cache adds logp + tpsa; v1 cache (qed/sa only) is ignored.
+        cache_path = self.root / f"qm9_properties_v2_{split}.pt"
         if cache_path.exists():
             cached = torch.load(cache_path, weights_only=True)
-            self._qed = cached["qed"]
-            self._sa  = cached["sa"]
+            self._qed  = cached["qed"]
+            self._sa   = cached["sa"]
+            self._logp = cached["logp"]
+            self._tpsa = cached["tpsa"]
         else:
-            print(f"[QM9Dataset] Computing QED/SA for {len(self._indices)} molecules "
-                  f"(split={split}). This runs once and is cached to {cache_path}.")
-            qed_vals, sa_vals = [], []
+            print(f"[QM9Dataset] Computing QED/SA/LogP/TPSA for {len(self._indices)} "
+                  f"molecules (split={split}). Cached to {cache_path}.")
+            qed_vals, sa_vals, logp_vals, tpsa_vals = [], [], [], []
             for idx in self._indices:
                 mol = self._pyg[idx]
                 smiles = getattr(mol, "smiles", None) or ""
-                q, s = _compute_qed_sa(smiles)
-                qed_vals.append(q)
-                sa_vals.append(s)
-            self._qed = torch.tensor(qed_vals, dtype=torch.float32)
-            self._sa  = torch.tensor(sa_vals,  dtype=torch.float32)
-            torch.save({"qed": self._qed, "sa": self._sa}, cache_path)
+                q, s, lp, tp = _compute_properties(smiles)
+                qed_vals.append(q); sa_vals.append(s)
+                logp_vals.append(lp); tpsa_vals.append(tp)
+            self._qed  = torch.tensor(qed_vals,  dtype=torch.float32)
+            self._sa   = torch.tensor(sa_vals,   dtype=torch.float32)
+            self._logp = torch.tensor(logp_vals, dtype=torch.float32)
+            self._tpsa = torch.tensor(tpsa_vals, dtype=torch.float32)
+            torch.save(
+                {"qed": self._qed, "sa": self._sa,
+                 "logp": self._logp, "tpsa": self._tpsa},
+                cache_path,
+            )
         q33, q66 = self._qed.quantile(torch.tensor([1/3, 2/3]))
         self._groups = torch.zeros(len(self._indices), dtype=torch.long)
         self._groups[self._qed >= q33] = 1
@@ -147,6 +156,8 @@ class QM9Dataset(Dataset):
             "n_atoms": mol.pos.shape[0],
             "qed":   self._qed[idx],
             "sa":    self._sa[idx],
+            "logp":  self._logp[idx],
+            "tpsa":  self._tpsa[idx],
             "group": self._groups[idx],
         }
 
@@ -158,5 +169,7 @@ class QM9Dataset(Dataset):
             "n_atoms": [b["n_atoms"] for b in batch],
             "qed":   torch.stack([b["qed"]   for b in batch]),
             "sa":    torch.stack([b["sa"]    for b in batch]),
+            "logp":  torch.stack([b["logp"]  for b in batch]),
+            "tpsa":  torch.stack([b["tpsa"]  for b in batch]),
             "group": torch.stack([b["group"] for b in batch]),
         }
