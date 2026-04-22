@@ -389,6 +389,15 @@ def _build_edm_args(cfg: DictConfig, device: torch.device):
     args.normalize_factors = [1, 4, 10]
     args.conditioning = []
     args.context_node_nf = 0
+    # Fields accessed by get_model but absent from our original namespace
+    args.condition_time = True
+    args.tanh = True
+    args.model = "egnn_dynamics"
+    args.norm_constant = 1
+    args.inv_sublayers = 1
+    args.normalization_factor = 1   # scalar; distinct from normalize_factors list
+    args.aggregation_method = "sum"
+    args.probabilistic_model = "diffusion"
     args.device = str(device)
     args.lr = float(cfg.training.learning_rate)
     args.weight_decay = 1e-12
