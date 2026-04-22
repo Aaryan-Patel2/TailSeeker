@@ -61,4 +61,4 @@ output:
 wandb:
   project: tailseeker-edm-fullscale
   entity: null            # set to your W&B username/team
-  mode: online
+  mode: disabled        # opt-in: override to 'online' when entity is set

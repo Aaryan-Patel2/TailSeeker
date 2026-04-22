@@ -93,22 +93,22 @@ def _train_loop(
     tilt: float,
     seed: int,
 ) -> None:
-    """EDM training loop with tilted loss.  Structure mirrors EDM's train_qm9.py."""
+    """EDM training loop with tilted loss.  Structure mirrors EDM's main_qm9.py."""
     # ── Build EDM model & data (via EDM's own factory functions) ──────────
     import qm9.losses as qm9_losses  # type: ignore[import]
-    import qm9.utils as qm9_utils  # type: ignore[import]
     from qm9 import dataset as qm9_dataset  # type: ignore[import]
-    from qm9.models import get_model  # type: ignore[import]  # EDM's factory
+    from qm9.models import get_model  # type: ignore[import]
+    # get_dataset_info is in configs/datasets_config, not qm9.utils
+    from configs.datasets_config import get_dataset_info  # type: ignore[import]
 
     # Parse EDM args from our Hydra config — EDM uses an argparse-style namespace
     edm_args = _build_edm_args(cfg, device)
 
-    dataset_info = qm9_utils.get_dataset_info(
-        dataset_name="qm9", remove_h=edm_args.remove_h
-    )
+    dataset_info = get_dataset_info("qm9", edm_args.remove_h)
     dataloaders, charge_scale = qm9_dataset.retrieve_dataloaders(edm_args)
 
-    model, nodes_dist, prop_dist = get_model(edm_args, device, dataset_info, dataloaders)
+    # get_model takes the train split only, not the full dataloaders dict
+    model, nodes_dist, prop_dist = get_model(edm_args, device, dataset_info, dataloaders["train"])
     model = model.to(device)
 
     if cfg.edm.get("checkpoint"):
