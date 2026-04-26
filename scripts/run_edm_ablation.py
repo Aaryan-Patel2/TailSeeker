@@ -209,7 +209,7 @@ def _train_one_epoch(model, loader, optimizer, edm_args, nodes_dist, qm9_losses,
         # Ensure 'integer' key: EDM normalize() reads h['integer'] for normalization.
         # Derive from categorical if missing: integer index is the argmax of one-hot.
         if 'integer' not in h and 'categorical' in h:
-            h['integer'] = h['categorical'].argmax(dim=-1, keepdim=True).float()
+            h['integer'] = h['categorical'].float().argmax(dim=-1, keepdim=True).float()
 
         node_mask = batch["atom_mask"].to(device).float()
         edge_mask = batch["edge_mask"].to(device).float()
