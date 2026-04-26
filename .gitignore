@@ -177,4 +177,5 @@ multirun/
 
 #Data files
 data/raw/
+notebooks/data/
 tests/unit/

@@ -36,10 +36,10 @@ loss:
 
 # ── Diffusion schedule ───────────────────────────────────────────────
 diffusion:
-  schedule: linear        # "linear" | "cosine"
+  schedule: polynomial_2  # "polynomial_<int>" | "cosine"  (EDM convention; "linear" is NOT supported)
   num_timesteps: 1000
-  beta_start: 1.0e-4      # only used by linear schedule
-  beta_end: 0.02          # only used by linear schedule
+  beta_start: 1.0e-4      # CPU-only DDPMSimpleLoss fallback; not used by EDM runs
+  beta_end: 0.02          # CPU-only DDPMSimpleLoss fallback; not used by EDM runs
 
 # ── Training ─────────────────────────────────────────────────────────
 training:
