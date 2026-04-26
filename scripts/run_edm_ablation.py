@@ -193,13 +193,33 @@ def _train_one_epoch(model, loader, optimizer, edm_args, nodes_dist, qm9_losses,
 
     for batch in loader:
         x = batch["positions"].to(device)
-        h = {k: v.to(device) for k, v in batch["one_hot"].items()} if isinstance(
-            batch.get("one_hot"), dict) else {"categorical": batch["one_hot"].to(device)}
-        node_mask = batch["atom_mask"].to(device)
-        edge_mask = batch["edge_mask"].to(device)
+        # Validate positions shape: should be (batch_size, max_atoms, 3)
+        assert x.ndim == 3, f"[x shape error] x must be 3D (batch, atoms, 3), got shape {x.shape}, ndim={x.ndim}"
+        assert x.shape[-1] == 3, f"[x shape error] last dim must be 3 (xyz coords), got {x.shape[-1]} from shape {x.shape}"
+        assert x.shape[1] > 0, f"[x shape error] n_atoms must be > 0, got {x.shape[1]} from shape {x.shape}"
+
+        # Build h dict: EDM's model.normalize() requires both 'categorical' and 'integer' keys.
+        # 'categorical' = one-hot (B, N, n_types); 'integer' = argmax index (B, N, 1).
+        one_hot_raw = batch.get("one_hot")
+        if isinstance(one_hot_raw, dict):
+            h = {k: v.to(device) for k, v in one_hot_raw.items()}
+        else:
+            cat = one_hot_raw.to(device) if hasattr(one_hot_raw, 'to') else torch.as_tensor(one_hot_raw, device=device)
+            h = {"categorical": cat}
+        # Ensure 'integer' key: EDM normalize() reads h['integer'] for normalization.
+        # Derive from categorical if missing: integer index is the argmax of one-hot.
+        if 'integer' not in h and 'categorical' in h:
+            h['integer'] = h['categorical'].argmax(dim=-1, keepdim=True).float()
+
+        node_mask = batch["atom_mask"].to(device).float()
+        edge_mask = batch["edge_mask"].to(device).float()
         context = batch.get("context", None)
         if context is not None:
             context = context.to(device)
+
+        # node_mask must be (B, N, 1) to broadcast with coords (B, N, 3) in assert_correctly_masked
+        if node_mask.ndim == 2:
+            node_mask = node_mask.unsqueeze(-1)
 
         optimizer.zero_grad()
         # qm9_losses.compute_loss_and_nll is patched by EDMAdapter to use term_aggregate
