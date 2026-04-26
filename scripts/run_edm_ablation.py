@@ -221,6 +221,11 @@ def _train_one_epoch(model, loader, optimizer, edm_args, nodes_dist, qm9_losses,
         if node_mask.ndim == 2:
             node_mask = node_mask.unsqueeze(-1)
 
+        # EDM requires zero center-of-mass: subtract per-molecule centroid over valid atoms
+        n_atoms = node_mask.sum(dim=1, keepdim=True).clamp(min=1)  # (B, 1, 1)
+        centroid = (x * node_mask).sum(dim=1, keepdim=True) / n_atoms  # (B, 1, 3)
+        x = x - centroid * node_mask
+
         optimizer.zero_grad()
         # qm9_losses.compute_loss_and_nll is patched by EDMAdapter to use term_aggregate
         nll, reg_term, _ = qm9_losses.compute_loss_and_nll(
